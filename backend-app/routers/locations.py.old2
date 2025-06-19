@@ -1,0 +1,115 @@
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
+from typing import List
+
+from app import schemas, models, database
+
+router = APIRouter()
+
+@router.get("/sites", response_model=List[schemas.Site])
+def get_sites(db: Session = Depends(database.get_db)):
+    sites = db.query(models.Site).all()
+    return sites
+
+@router.get("/sites/{site_id}/floors", response_model=List[schemas.Floor])
+def get_floors(site_id: int, db: Session = Depends(database.get_db)):
+    floors = db.query(models.Floor).filter(models.Floor.site_id == site_id).all()
+    return floors
+
+@router.post("/sites", response_model=schemas.Site, status_code=status.HTTP_201_CREATED)
+def create_site(site: schemas.SiteCreate, db: Session = Depends(database.get_db)):
+    db_site = models.Site(**site.dict())
+    db.add(db_site)
+    db.commit()
+    db.refresh(db_site)
+    return db_site
+
+@router.put("/sites/{site_id}", response_model=schemas.Site)
+def update_site(site_id: int, site_update: schemas.SiteUpdate, db: Session = Depends(database.get_db)):
+    site = db.query(models.Site).filter(models.Site.id == site_id).first()
+    if not site:
+        raise HTTPException(status_code=404, detail="Site not found")
+    for key, value in site_update.dict(exclude_unset=True).items():
+        setattr(site, key, value)
+    db.commit()
+    db.refresh(site)
+    return site
+
+@router.delete("/sites/{site_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_site(site_id: int, db: Session = Depends(database.get_db)):
+    site = db.query(models.Site).filter(models.Site.id == site_id).first()
+    if not site:
+        raise HTTPException(status_code=404, detail="Site not found")
+    db.delete(site)
+    db.commit()
+    return None
+
+@router.get("/floors/{floor_id}/rooms", response_model=List[schemas.Room])
+def get_rooms(floor_id: int, db: Session = Depends(database.get_db)):
+    rooms = db.query(models.Room).filter(models.Room.floor_id == floor_id).all()
+    return rooms
+
+@router.put("/floors/{floor_id}", response_model=schemas.Floor)
+def update_floor(floor_id: int, floor_update: schemas.FloorUpdate, db: Session = Depends(database.get_db)):
+    floor = db.query(models.Floor).filter(models.Floor.id == floor_id).first()
+    if not floor:
+        raise HTTPException(status_code=404, detail="Floor not found")
+    for key, value in floor_update.dict(exclude_unset=True).items():
+        setattr(floor, key, value)
+    db.commit()
+    db.refresh(floor)
+    return floor
+
+@router.delete("/floors/{floor_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_floor(floor_id: int, db: Session = Depends(database.get_db)):
+    floor = db.query(models.Floor).filter(models.Floor.id == floor_id).first()
+    if not floor:
+        raise HTTPException(status_code=404, detail="Floor not found")
+    db.delete(floor)
+    db.commit()
+    return None
+
+@router.get("/rooms/{room_id}/zones", response_model=List[schemas.Zone])
+def get_zones(room_id: int, db: Session = Depends(database.get_db)):
+    zones = db.query(models.Zone).filter(models.Zone.room_id == room_id).all()
+    return zones
+
+@router.put("/rooms/{room_id}", response_model=schemas.Room)
+def update_room(room_id: int, room_update: schemas.RoomUpdate, db: Session = Depends(database.get_db)):
+    room = db.query(models.Room).filter(models.Room.id == room_id).first()
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    for key, value in room_update.dict(exclude_unset=True).items():
+        setattr(room, key, value)
+    db.commit()
+    db.refresh(room)
+    return room
+
+@router.delete("/rooms/{room_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_room(room_id: int, db: Session = Depends(database.get_db)):
+    room = db.query(models.Room).filter(models.Room.id == room_id).first()
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    db.delete(room)
+    db.commit()
+    return None
+
+@router.put("/zones/{zone_id}", response_model=schemas.Zone)
+def update_zone(zone_id: int, zone_update: schemas.ZoneUpdate, db: Session = Depends(database.get_db)):
+    zone = db.query(models.Zone).filter(models.Zone.id == zone_id).first()
+    if not zone:
+        raise HTTPException(status_code=404, detail="Zone not found")
+    for key, value in zone_update.dict(exclude_unset=True).items():
+        setattr(zone, key, value)
+    db.commit()
+    db.refresh(zone)
+    return zone
+
+@router.delete("/zones/{zone_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_zone(zone_id: int, db: Session = Depends(database.get_db)):
+    zone = db.query(models.Zone).filter(models.Zone.id == zone_id).first()
+    if not zone:
+        raise HTTPException(status_code=404, detail="Zone not found")
+    db.delete(zone)
+    db.commit()
+    return None
