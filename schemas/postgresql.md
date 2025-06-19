@@ -1,18 +1,28 @@
-# PostgreSQL Schema Summary
+# PostgreSQL Schema Overview
 
-## Credentials
+## Databases
 
-- Username: `iot`
-- Password: `secret` (only in dev; secure via env vars in prod)
+| Name        | Used By          |
+|-------------|------------------|
+| device_db   | Device Manager   |
+| ingest      | Ingest Service   |
 
-## Schemas
+## Schemas & Tables
 
-- `devices`: main schema for all tables
-- `public`: temporary uplinks (to be deprecated)
+| Database    | Schema   | Table             | Purpose                                |
+|-------------|----------|------------------|----------------------------------------|
+| device_db   | devices  | device_types      | Decoder reference definitions          |
+|             | devices  | devices           | DevEUI and location associations       |
+|             | devices  | uplinks           | Decoded uplink payloads                |
+|             | devices  | sites, rooms, floors, zones | Location hierarchy        |
+| ingest      | public   | raw_uplinks       | Raw payloads from Actility/gateways    |
 
-## Key Tables
+## Planned Schema Consolidation
 
-- `devices.devices`
-- `devices.device_types`
-- `devices.uplinks`
-- `devices.sites`, `floors`, `rooms`, `zones`
+| Schema      | Purpose                    |
+|-------------|----------------------------|
+| ingestion   | Raw device data            |
+| devices     | Registry and twinning      |
+| processing  | Enriched payloads          |
+| analytics   | Aggregates and alerts      |
+| system      | Configuration & auth       |

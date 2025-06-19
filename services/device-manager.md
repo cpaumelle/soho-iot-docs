@@ -2,27 +2,36 @@
 
 ## Overview
 
-FastAPI-based backend service for managing device metadata, locations, decoding, and uplinks.
+FastAPI-based backend managing:
+- Device metadata
+- Location twinning
+- Decoding logic
+- Uplink storage
 
-## Key Endpoints
+## API Base Path
 
-- `/v1/devices/api/summary` — Dashboard overview
-- `/v1/devices/api/uplinks` — Recent uplinks
+/v1/devices/api
 
-## Reverse Proxy
+## API Endpoints
 
-Handled via Caddy:
-```
-route /api/device-manager* {
-    rewrite /api/device-manager(.*) /v1/devices/api$1
-    reverse_proxy device-manager-device-server-1:9000
-}
-```
+| Method | Path                | Purpose                        |
+|--------|---------------------|--------------------------------|
+| GET    | /device-types       | List known device types        |
+| GET    | /orphans            | Devices not yet twinned        |
+| GET    | /locations          | Get all locations              |
+| POST   | /locations          | Add a new location             |
+| PUT    | /locations/{id}     | Update an existing location    |
+| DELETE | /locations/{id}     | Delete a location              |
+| GET    | /debug/search-path  | Show current DB search_path    |
 
-## Vue UI Fetch
+## Environment Variables (example)
 
-```js
-const res = await fetch("/api/device-manager/summary");
-```
+POSTGRES_USER=iot  
+POSTGRES_PASSWORD=secret  
+POSTGRES_DB=device_db  
+POSTGRES_HOST=device-manager-postgres-1
 
-File path: `~/iot/frontend/soho-iot-ui/src/views/DashboardView.vue`
+## UI Access (Development)
+
+- /static/       → Bootstrap-based UI
+- /twinning/     → Device twinning interface
