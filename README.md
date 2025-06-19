@@ -14,6 +14,6 @@ A robust, modular SOHO IoT stack that:
 ## Folder Structure
 
 - `infra/` — Infrastructure config (Docker, ports, proxy)
-- `services/` — Service details (ingest, device manager, processing)
+- `services/` — Service details (ingest, device manager, UI)
 - `schemas/` — Database schemas and table purpose
 - `CHANGELOG.md` — Version history

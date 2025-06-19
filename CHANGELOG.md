@@ -3,15 +3,14 @@
 ## [2025-06-19]
 ### Added
 - Merged v32 and v34 documentation into markdown files
-- Expanded API endpoint listings under device-manager
-- Added external domain mapping from Caddy
-- Described planned schema migration across services
-- Defined current and future Docker services
+- Documented Caddy, Adminer, and Vue-based UI services
+- Confirmed port mappings for all containers in production
 
 ### Improved
-- Clarified schema split between 'devices' and 'public'
-- Updated folder and UI paths for device twinning
+- Removed legacy networks and volumes: `device-manager-dev_*`, `soho-iot-ui_*`
+- Archived `twinning-dev` folder and removed stale `index.php`
+- Cleaned and aligned container naming across layers
 
 ### Pending
-- Processing and analytics layers in planned docs
-- Redis implementation for jobs and pubsub
+- Add full description of processing and analytics layers (planned)
+- Clarify use of `frontend/` vs. Dockerized UI build

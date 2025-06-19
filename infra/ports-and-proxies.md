@@ -1,30 +1,27 @@
 # Port & Reverse Proxy Mapping
 
-## 🧭 External Domains
+## External Domains
 
-| Domain                  | Purpose                              |
-|-------------------------|--------------------------------------|
-| `api.verdegris.eu`      | Unified API Gateway                  |
-| `ingest.verdegris.eu`   | Direct high-volume ingest endpoint   |
-| `devices.verdegris.eu`  | Legacy redirect to `/v1/devices/`    |
+| Domain                | Purpose                            |
+|-----------------------|------------------------------------|
+| api.verdegris.eu      | Unified API Gateway (Caddy)        |
+| ingest.verdegris.eu   | Direct ingest for sensors          |
+| devices.verdegris.eu  | Legacy redirect to `/v1/devices`   |
 
-## 🔁 Reverse Proxy (Caddy)
+## Internal Port Map (All Services)
 
-- `/api/device-manager/*` → `device-manager-device-server-1:9000`
-- `/api/ingest/*` → `ingest-server-ingest-1:8000`
-- `/admin` → `adminer_dashboard_caddy:80`
-- `/health` → JSON response
-- Enables CORS, gzip, and automatic SSL via Let’s Encrypt
+| Port | Purpose                        | Container/Layer           |
+|------|--------------------------------|----------------------------|
+| 8000 | FastAPI ingest endpoint        | ingest-server-ingest-1    |
+| 8080 | Adminer DB UI (via Caddy)      | adminer_dashboard_caddy   |
+| 8090 | HTTP API Gateway (Caddy)       | iot-api-gateway           |
+| 8443 | HTTPS API Gateway (Caddy)      | iot-api-gateway           |
+| 8800 | Vue UI (during dev)            | soho-iot-ui (internally exposed) |
+| 9000 | FastAPI device manager         | device-manager-device-server-1 |
+| 5432 | PostgreSQL for ingest          | ingest-server-postgres-1  |
+| 5433 | PostgreSQL for device manager  | device-manager-postgres-1 |
 
-## 📍 Port Mappings
+## Notes
 
-| Port | Purpose                        | Layer               |
-|------|--------------------------------|---------------------|
-| 8000 | Ingest FastAPI                 | Ingestion           |
-| 8080 | Adminer DB UI                  | Admin UI            |
-| 8090 | API Gateway HTTP               | Reverse proxy       |
-| 8443 | API Gateway HTTPS              | Reverse proxy       |
-| 8800 | Vue Dev Server                 | Dashboard UI        |
-| 9000 | Device Manager API             | Device registry     |
-| 5432 | PostgreSQL (Ingest)            | Raw uplinks DB      |
-| 5433 | PostgreSQL (Device Manager)    | Device metadata DB  |
+- All legacy containers, volumes, and networks have been removed.
+- `frontend/` folder may be deprecated in favor of dockerized `soho-iot-ui`.
