@@ -1,0 +1,406 @@
+# Analytics Container Architecture - Sequential Pipeline with Replay
+
+## Overview
+
+This document outlines the architecture for the Analytics Container in the SOHO IoT platform, implementing a sequential data pipeline with loose coupling and comprehensive replay capabilities for production resilience.
+
+---
+
+## Architecture Principles
+
+### ✅ **Sequential Processing Pipeline**
+- **Clear data lineage**: Raw → Device Management → Analytics
+- **Failure isolation**: Each stage can fail independently  
+- **Replay capability**: Can reprocess from any stage
+- **Audit trail**: Full processing history maintained
+
+### ✅ **Loose Coupling Strategy**
+```
+Ingest DB ← Analytics reads when Device Manager is down
+    ↓
+Device Manager API ← Primary path for metadata
+    ↓
+Analytics Processing ← Can fallback to direct DB reads
+```
+
+---
+
+## Data Flow Architecture
+
+### Primary Processing Path
+1. **Analytics Container** polls `ingest.raw_uplinks WHERE processed_by_device_manager=true AND processed_by_analytics=false`
+2. **Device Context Fetch** via Device Manager API (`GET /v1/devices/{deveui}`)
+3. **Payload Decoding** using device-type-specific decoders
+4. **Data Normalization** applying sensor standardization rules
+5. **Storage** in `device_db.uplinks` with full metadata
+6. **State Update** marking `processed_by_analytics=true`
+
+### Fallback Processing Path
+- **Direct Database Access** when Device Manager API unavailable
+- **Emergency Processing** using cached device metadata
+- **Graceful Degradation** with reduced functionality but continued operation
+
+---
+
+## Database Schema Extensions
+
+### Analytics Processing State Tracking
+```sql
+-- Analytics processing tracking
+CREATE TABLE analytics_processing_log (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    raw_uplink_id UUID NOT NULL,
+    processing_stage TEXT NOT NULL, -- 'FETCHED', 'DECODED', 'STORED', 'FAILED'
+    processing_timestamp TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    
+    -- Replay capability
+    source_data JSONB NOT NULL, -- Original data for replay
+    processing_metadata JSONB, -- Device context, decoder used, etc.
+    
+    -- Error handling
+    error_details JSONB,
+    retry_count INTEGER DEFAULT 0,
+    
+    -- Replay tracking
+    replay_from_stage TEXT,
+    original_processing_id UUID REFERENCES analytics_processing_log(id),
+    
+    -- Retention management (30 days)
+    expires_at TIMESTAMP WITH TIME ZONE DEFAULT (NOW() + INTERVAL '30 days')
+);
+
+-- Indexes for performance
+CREATE INDEX idx_analytics_processing_stage ON analytics_processing_log(processing_stage);
+CREATE INDEX idx_analytics_processing_timestamp ON analytics_processing_log(processing_timestamp);
+CREATE INDEX idx_analytics_expires_at ON analytics_processing_log(expires_at);
+```
+
+### Enhanced Raw Uplinks Tracking
+```sql
+-- Extend existing raw_uplinks table
+ALTER TABLE raw_uplinks ADD COLUMN IF NOT EXISTS processed_by_analytics BOOLEAN DEFAULT FALSE;
+ALTER TABLE raw_uplinks ADD COLUMN IF NOT EXISTS analytics_processing_errors JSONB;
+ALTER TABLE raw_uplinks ADD COLUMN IF NOT EXISTS last_analytics_attempt TIMESTAMP WITH TIME ZONE;
+```
+
+---
+
+## Core Components
+
+### 1. Analytics Data Access Layer
+```python
+class AnalyticsDataAccess:
+    def get_uplink_with_context(self, uplink_id):
+        """
+        Resilient data fetching with fallback strategy
+        """
+        try:
+            # Primary: API call to Device Manager
+            device_context = self.device_manager_client.get_device_context(uplink_id)
+            return device_context
+        except (ConnectionError, TimeoutError):
+            # Fallback: Direct database read
+            return self.direct_db_fallback(uplink_id)
+    
+    def direct_db_fallback(self, uplink_id):
+        """
+        Direct database access when API is unavailable
+        """
+        # Read from both databases directly
+        raw_uplink = self.ingest_db.get_raw_uplink(uplink_id)
+        device_metadata = self.device_db.get_device_metadata(raw_uplink.deveui)
+        
+        return self.merge_context(raw_uplink, device_metadata)
+```
+
+### 2. Batch Processing Engine
+```python
+class AnalyticsBatchProcessor:
+    BATCH_SIZE = 100
+    POLL_INTERVAL = 30  # seconds
+    
+    def poll_for_twinned_uplinks(self):
+        """
+        Poll for processed uplinks from Device Manager
+        Only process fully twinned devices
+        """
+        query = """
+            SELECT ru.* FROM raw_uplinks ru
+            WHERE ru.processed_by_device_manager = true
+            AND ru.processed_by_analytics = false
+            AND ru.processing_status = 'TWINNED'
+            ORDER BY ru.received_at
+            LIMIT %s
+        """
+        return self.ingest_db.query(query, (self.BATCH_SIZE,))
+    
+    def process_batch(self, uplinks):
+        """
+        Process batch of uplinks with error handling
+        """
+        for uplink in uplinks:
+            try:
+                self.process_single_uplink(uplink)
+            except Exception as e:
+                self.log_processing_error(uplink, e)
+                # Continue processing other uplinks
+```
+
+### 3. Decoder Registry (Sensor Standardization)
+```python
+class DecoderRegistry:
+    def get_decoder_for_device(self, device_type_config):
+        """
+        Select appropriate decoder based on device type mapping
+        Uses sensor standardization strategy
+        """
+        decoder_config = device_type_config['payload_decoder_config']
+        return self.decoder_factory.create_decoder(decoder_config)
+    
+    def decode_payload(self, raw_payload, device_context):
+        """
+        Apply vendor-specific decoding with normalization
+        """
+        decoder = self.get_decoder_for_device(device_context['device_type'])
+        decoded_data = decoder.decode(raw_payload)
+        
+        # Apply sensor standardization
+        normalized_data = SensorDataNormalizer.normalize_sensor_data(
+            device_context['device_type'], 
+            decoded_data
+        )
+        
+        return normalized_data
+```
+
+### 4. Replay Engine
+```python
+class ReplayEngine:
+    def replay_from_stage(self, uplink_id, from_stage='FETCHED'):
+        """
+        Replay processing from any stage
+        Critical for debugging and data recovery
+        """
+        # Fetch original processing record
+        original_record = self.get_processing_record(uplink_id)
+        
+        # Replay from specified stage
+        if from_stage == 'FETCHED':
+            return self.reprocess_full_pipeline(original_record)
+        elif from_stage == 'DECODED':
+            return self.reprocess_from_decoded(original_record)
+        elif from_stage == 'STORED':
+            return self.reprocess_storage_only(original_record)
+        
+    def bulk_replay(self, time_range, device_filter=None):
+        """
+        Bulk replay for data recovery scenarios
+        """
+        failed_records = self.query_failed_processing(time_range, device_filter)
+        
+        for record in failed_records:
+            self.replay_from_stage(record.id, 'FETCHED')
+    
+    def get_failed_processing_summary(self):
+        """
+        Generate summary for admin warnings
+        """
+        query = """
+            SELECT 
+                processing_stage,
+                COUNT(*) as failure_count,
+                MAX(processing_timestamp) as last_failure
+            FROM analytics_processing_log 
+            WHERE processing_stage = 'FAILED'
+            AND processing_timestamp > NOW() - INTERVAL '24 hours'
+            GROUP BY processing_stage
+        """
+        return self.analytics_db.query(query)
+```
+
+---
+
+## Error Handling & Recovery
+
+### Manual Intervention Approach
+- **No automatic retries** - all failures require manual review
+- **Comprehensive logging** of all processing errors
+- **Admin warning system** for failure notifications (future enhancement)
+- **Detailed error context** stored for troubleshooting
+
+### Processing States
+```python
+PROCESSING_STATES = {
+    'PENDING': 'Awaiting processing',
+    'FETCHED': 'Device context retrieved', 
+    'DECODED': 'Payload successfully decoded',
+    'NORMALIZED': 'Data normalized to standard format',
+    'STORED': 'Successfully stored in device_db',
+    'FAILED': 'Processing failed - manual intervention required'
+}
+```
+
+---
+
+## Container Configuration
+
+### Docker Compose Addition
+```yaml
+analytics-processor:
+  build: ./analytics-processor
+  ports:
+    - "9100:9100"  # Analytics API port
+  environment:
+    - INGEST_DB_URL=postgresql://user:pass@ingest-server-postgres:5432/ingest
+    - DEVICE_DB_URL=postgresql://user:pass@device-manager-postgres:5432/device_db
+    - DEVICE_MANAGER_API_URL=http://device-manager:9000
+    - BATCH_SIZE=100
+    - POLL_INTERVAL=30
+    - LOG_LEVEL=INFO
+  depends_on:
+    - ingest-server-postgres
+    - device-manager-postgres
+    - device-manager
+  networks:
+    - iot-network
+  volumes:
+    - ./analytics-processor/logs:/app/logs
+  restart: unless-stopped
+```
+
+### Environment Variables
+```bash
+# Database connections
+INGEST_DB_URL=postgresql://user:pass@ingest-server-postgres:5432/ingest
+DEVICE_DB_URL=postgresql://user:pass@device-manager-postgres:5432/device_db
+
+# Service dependencies  
+DEVICE_MANAGER_API_URL=http://device-manager:9000
+
+# Processing configuration
+BATCH_SIZE=100
+POLL_INTERVAL=30
+PROCESSING_LOG_RETENTION_DAYS=30
+
+# Error handling
+ENABLE_API_FALLBACK=true
+MAX_RETRY_ATTEMPTS=0  # Manual intervention only
+```
+
+---
+
+## API Endpoints
+
+### Analytics Management API
+```python
+@app.get("/v1/analytics/status")
+def get_processing_status():
+    """Get current processing statistics"""
+    
+@app.get("/v1/analytics/failures")  
+def get_recent_failures():
+    """Get failed processing records for admin review"""
+    
+@app.post("/v1/analytics/replay/{uplink_id}")
+def replay_uplink_processing(uplink_id: str, from_stage: str = "FETCHED"):
+    """Manually replay processing for specific uplink"""
+    
+@app.post("/v1/analytics/bulk-replay")
+def bulk_replay_processing(time_range: dict, device_filter: str = None):
+    """Bulk replay for data recovery"""
+    
+@app.get("/v1/analytics/health")
+def health_check():
+    """Container health check"""
+```
+
+---
+
+## Data Retention & Cleanup
+
+### Automated Cleanup (30 days)
+```sql
+-- Scheduled cleanup job (run daily)
+DELETE FROM analytics_processing_log 
+WHERE expires_at < NOW();
+
+-- Archive successful processing logs older than 7 days
+UPDATE analytics_processing_log 
+SET source_data = NULL, processing_metadata = NULL
+WHERE processing_stage = 'STORED' 
+AND processing_timestamp < NOW() - INTERVAL '7 days';
+```
+
+---
+
+## Implementation Phases
+
+### Phase 1: Core Analytics Container
+- [x] Database schema extensions
+- [x] Basic polling service (FastAPI container)
+- [x] Decoder framework implementation
+- [x] Manual replay capability
+- [x] Error logging and state tracking
+
+### Phase 2: Resilience Features (Future)
+- [ ] API fallback with direct database access
+- [ ] Admin warning system for failures
+- [ ] Enhanced monitoring and metrics
+- [ ] Bulk reprocessing UI
+- [ ] Performance optimization
+
+### Phase 3: Advanced Features (Future)
+- [ ] Automated health checks
+- [ ] Processing performance analytics
+- [ ] Advanced replay strategies
+- [ ] Integration with monitoring systems
+
+---
+
+## Key Design Decisions
+
+### ✅ **Confirmed Specifications**
+- **Processing Mode**: Batch processing (30-second intervals)
+- **Error Recovery**: Manual intervention with admin warnings
+- **Data Retention**: 30 days for processing logs
+- **Monitoring**: To be confirmed in later project phases
+
+### ✅ **Architecture Benefits**
+- **Fault Tolerance**: Each component can fail independently
+- **Data Recovery**: Complete replay capability from any stage
+- **Debugging**: Full audit trail of all processing attempts
+- **Scalability**: Batch processing prevents resource exhaustion
+- **Maintainability**: Clear separation of concerns
+
+---
+
+## File Structure
+```
+analytics-processor/
+├── app/
+│   ├── main.py                 # FastAPI application
+│   ├── processors/
+│   │   ├── batch_processor.py  # Batch processing engine
+│   │   ├── decoder_registry.py # Payload decoding
+│   │   └── replay_engine.py    # Replay functionality
+│   ├── data_access/
+│   │   ├── analytics_db.py     # Analytics database access
+│   │   ├── ingest_db.py        # Ingest database access
+│   │   └── device_manager_client.py # API client
+│   └── models/
+│       ├── processing_log.py   # Data models
+│       └── uplink_context.py   # Context models
+├── sql/
+│   └── schema_extensions.sql   # Database schema
+├── docker/
+│   └── Dockerfile
+├── requirements.txt
+└── README.md
+```
+
+---
+
+**Version**: 1.0.0  
+**Last Updated**: June 23, 2025  
+**Status**: Architecture Defined - Ready for Implementation  
+**Next Steps**: Begin Phase 1 implementation with core batch processing engine
