@@ -101,25 +101,79 @@ This document provides a **verified and tested** reference for all API endpoints
 - **Status**: ✅ **WORKING**
 
 #### `GET /v1/sites`
-- **Description**: Get all sites (excluding archived)
-- **Returns**: Array of site objects
-- **Status**: ✅ **WORKING**
+- **Description**: Get all sites with complete information including coordinates and archive status
+- **Returns**: Array of site objects with full details
+- **Response Format**:
+```json
+[
+  {
+    "id": 1,
+    "name": "Site Name",
+    "address": "Full Address",
+    "latitude": 48.6216117,
+    "longitude": -2.05668613,
+    "icon_name": "🏠",
+    "archived_at": null
+  },
+  {
+    "id": 13,
+    "name": "Archived Site",
+    "address": "Test Address",
+    "latitude": 40.7,
+    "longitude": -74.0,
+    "icon_name": "🧪",
+    "archived_at": "2025-06-23T16:15:37.339829+00:00"
+  }
+]
+```
+- **Status**: ✅ **WORKING** *(Fixed 2025-06-23)*
+- **Note**: Returns **ALL** sites (active and archived) with complete coordinate and status information
 
 #### `GET /v1/sites/{site_id}`
-- **Description**: Get individual site details
-- **Returns**: Site object
-- **Status**: ✅ **WORKING**
+- **Description**: Get individual site details with complete information
+- **Returns**: Site object with full details including coordinates and archive status
+- **Response Format**:
+```json
+{
+  "id": 1,
+  "name": "Site Name",
+  "address": "Full Address",
+  "latitude": 48.6216117,
+  "longitude": -2.05668613,
+  "icon_name": "🏠",
+  "archived_at": null
+}
+```
+- **Status**: ✅ **WORKING** *(Updated 2025-06-23)*
 
 #### `PUT /v1/sites/{site_id}`
-- **Description**: Update site details
+- **Description**: Update site with complete information including coordinates and archive status
 - **Payload**:
 ```json
 {
   "name": "Site Name",
-  "address": "Site Address"
+  "address": "Site Address",
+  "latitude": 48.6216117,
+  "longitude": -2.05668613,
+  "icon_name": "🏠",
+  "archived_at": null
 }
 ```
-- **Status**: ✅ **WORKING**
+- **Response Format**:
+```json
+{
+  "id": 1,
+  "name": "Site Name",
+  "address": "Site Address",
+  "latitude": 48.6216117,
+  "longitude": -2.05668613,
+  "icon_name": "🏠",
+  "archived_at": null
+}
+```
+- **Archive/Restore**: Set `archived_at` to ISO timestamp to archive, or `null` to restore
+- **Status**: ✅ **WORKING** *(Fixed 2025-06-23)*
+- **Note**: Now supports **complete site updates** including coordinates, icons, and archive status
 
 #### `GET /v1/zones`
 - **Description**: Get all zones with full location context
@@ -129,15 +183,29 @@ This document provides a **verified and tested** reference for all API endpoints
 ### Location Creation (CRUA - Create)
 
 #### `POST /v1/locations/site`
-- **Description**: Create a new site
+- **Description**: Create a new site with complete information
 - **Payload**:
 ```json
 {
   "name": "Site Name",
-  "address": "Site Address"
+  "address": "Site Address",
+  "latitude": 48.6216117,
+  "longitude": -2.05668613,
+  "icon_name": "🏠"
 }
 ```
-- **Returns**: `{"id": 1, "name": "Site Name", "address": "Site Address", "message": "Site created successfully"}`
+- **Returns**: 
+```json
+{
+  "id": 1,
+  "name": "Site Name",
+  "address": "Site Address",
+  "latitude": 48.6216117,
+  "longitude": -2.05668613,
+  "icon_name": "🏠",
+  "message": "Site created successfully"
+}
+```
 - **Status**: ✅ **WORKING**
 
 #### `POST /v1/locations/floor`
@@ -311,6 +379,56 @@ Currently, the development environment has **no authentication** enabled. Produc
 
 ## 📦 Sample Usage
 
+### Complete Site Management Workflow
+
+```bash
+# Create a site with coordinates
+curl -X POST https://api.verdegris.eu/v1/locations/site \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "New Office",
+    "address": "123 Business St, City",
+    "latitude": 40.7128,
+    "longitude": -74.0060,
+    "icon_name": "🏢"
+  }'
+
+# Update site with new coordinates
+curl -X PUT https://api.verdegris.eu/v1/sites/1 \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Updated Office",
+    "address": "456 New Address",
+    "latitude": 40.7589,
+    "longitude": -73.9851,
+    "icon_name": "🏬"
+  }'
+
+# Archive a site
+curl -X PUT https://api.verdegris.eu/v1/sites/1 \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Old Office",
+    "address": "456 New Address",
+    "latitude": 40.7589,
+    "longitude": -73.9851,
+    "icon_name": "🏬",
+    "archived_at": "2025-06-23T16:00:00.000000+00:00"
+  }'
+
+# Restore an archived site
+curl -X PUT https://api.verdegris.eu/v1/sites/1 \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Restored Office",
+    "address": "456 New Address",
+    "latitude": 40.7589,
+    "longitude": -73.9851,
+    "icon_name": "✅",
+    "archived_at": null
+  }'
+```
+
 ### Complete Location Management Workflow
 
 ```bash
@@ -367,11 +485,47 @@ curl -s "https://api.verdegris.eu/v1/locations/hierarchy" | jq
 
 # Get all zones with context
 curl -s "https://api.verdegris.eu/v1/zones" | jq
+
+# Get all sites with coordinates and archive status
+curl -s "https://api.verdegris.eu/v1/sites" | jq
 ```
 
 ---
 
 ## 🧾 Response Samples
+
+### `/v1/sites` Response (Updated)
+```json
+[
+  {
+    "id": 1,
+    "name": "Dinard - Complete Update",
+    "address": "Rue du Bois Met, Dinard, France",
+    "latitude": 48.6216117,
+    "longitude": -2.05668613,
+    "icon_name": "🏠",
+    "archived_at": null
+  },
+  {
+    "id": 13,
+    "name": "Smoke Test - Restored",
+    "address": "Test Address Updated",
+    "latitude": 40.7128,
+    "longitude": -74.006,
+    "icon_name": "✅",
+    "archived_at": null
+  },
+  {
+    "id": 10,
+    "name": "Test Site",
+    "address": "123 Test St",
+    "latitude": 42.0,
+    "longitude": -71.0,
+    "icon_name": "🏠",
+    "archived_at": "2025-06-23T11:06:39.888000+00:00"
+  }
+]
+```
 
 ### `/v1/devices` Response
 ```json
@@ -438,6 +592,7 @@ curl -s "https://api.verdegris.eu/v1/zones" | jq
 - **Archive-Only Architecture**: ❌ **NO HARD DELETES** - All operations use `archived_at` timestamps to preserve data history and maintain referential integrity for the digital twin
 - **Device History Protection**: ✅ Devices are **never deleted**, only unassigned - preserves complete operational history
 - **Audit Trail**: Full archive history available via `/v1/locations/archived` - nothing is ever permanently lost
+- **Complete Site Data**: ✅ Sites now include full coordinate, icon, and archive information for map integration
 - **No Authentication**: Development environment has no auth requirements
 
 ---
@@ -446,7 +601,7 @@ curl -s "https://api.verdegris.eu/v1/zones" | jq
 
 | Entity | Create | Read | Update | Archive | Status |
 |--------|--------|------|--------|---------|---------|
-| **Sites** | ✅ POST | ✅ GET | ✅ PUT | ✅ Soft Archive | **Complete** |
+| **Sites** | ✅ POST | ✅ GET | ✅ PUT | ✅ Soft Archive | **Complete** *(Fixed 2025-06-23)* |
 | **Floors** | ✅ POST | ✅ GET | ✅ PUT | ✅ DELETE | **Complete** |
 | **Rooms** | ✅ POST | ✅ GET | ✅ PUT | ✅ DELETE | **Complete** |
 | **Zones** | ✅ POST | ✅ GET | ✅ PUT | ✅ DELETE | **Complete** |
@@ -461,9 +616,11 @@ curl -s "https://api.verdegris.eu/v1/zones" | jq
 - **Data Safety**: ✅ Cascade operations with device protection
 - **Error Handling**: ✅ Comprehensive validation and constraint handling
 - **Audit Trail**: ✅ Full archive history and device unassignment tracking
+- **Map Integration**: ✅ Complete coordinate and status data for UI integration
 - **Production Ready**: ✅ All endpoints tested and verified
 
 **Last Updated**: June 23, 2025  
 **Test Status**: All endpoints verified working in production environment  
 **API Code Location**: `~/iot/device-manager/app/routers/devices.py` - Complete CRUA implementation  
-**Data Philosophy**: Archive-only operations preserve complete digital twin history
+**Data Philosophy**: Archive-only operations preserve complete digital twin history  
+**Major Fix**: Sites API now returns complete data structure for full UI integration *(2025-06-23)*
