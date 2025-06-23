@@ -1,0 +1,5 @@
+# ignore uploads, logs, secrets
+*.log
+*.key
+.env
+node_modules/
