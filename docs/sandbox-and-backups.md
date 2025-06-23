@@ -1,8 +1,6 @@
-# Sandboxes & Backups
+# Backups
 
-## Database Sandboxes
-- **db-sandbox/** – live dev DB copy  
-- **dev-db-sandbox/** – alternate staging DB
+
 
 ## Backups
 - **backups/**  
