@@ -1,83 +1,48 @@
-SOHO IoT Platform Documentation
+# SOHO IoT Platform Documentation
 
-Purpose
+A compact, maintainable, and production-ready platform for ingesting, processing, managing, and visualizing IoT data across SOHO (Small Office/Home Office) and SME (Small and Medium-sized Enterprise) environments.
 
-A compact, maintainable, and production-ready platform for ingesting, processing, managing, and visualizing IoT data across SOHO and SME environments.
+## Table of Contents
 
-Architecture Overview
+* [Purpose](#purpose)
+* [Architecture Overview](#architecture-overview)
+    * [Containers](#containers)
+    * [Proxy & Domains](#proxy--domains)
+* [File & Folder Structure](#file--folder-structure)
+* [API Endpoints](#api-endpoints)
+    * [Ingest Server](#ingest-server)
+    * [Device Manager](#device-manager)
+* [Environment Variables](#environment-variables)
+* [Quick Start](#quick-start)
+* [Detailed Service Documentation](#detailed-service-documentation)
 
-Containers
-Service
-Purpose
-Internal Port
-Source Folder
-ingest-server
-Public ingest gateway for LoRaWAN payloads
-8000
-~/iot/ingest-server/
-device-manager
-Device CRUD, metadata & decoding logic
-9000
-~/iot/device-manager/
-reverse-proxy
-Caddy TLS & routing
-80/443
-~/iot/unified-caddyfile
-ingest-database
-PostgreSQL for raw uplinks
-5432
-volume ingest-server_pgdata
-device-database
-PostgreSQL for device metadata
-5432
-volume postgres_data
+## Purpose
 
-Proxy & Domains
-	•	ingest.verdegris.eu → ingest-service:8000
-	•	api.verdegris.eu     → device-manager:9000
-	•	adminer.verdegris.eu → adminer-ui:8080
-	•	app.verdegris.eu     → static frontend
+This platform is designed to provide a robust and scalable solution for handling IoT data, from initial ingestion to advanced processing, device management, and data visualization. It's built with maintainability in mind, making it suitable for both small-scale deployments and environments requiring more comprehensive data handling.
 
-File & Folder Structure
+## Architecture Overview
 
-~/iot/
-├── ingest-server/
-├── device-manager/
-├── unified-caddyfile
-├── docker-compose.yml
-└── docs/                    # This repo’s docs
-└── services/            # Service-specific docs
+The SOHO IoT Platform is built using a modular, containerized architecture for flexibility and ease of deployment.
 
-API Endpoints
+### Containers
 
-Ingest Server
-	•	POST /uplink → Receive and store raw payloads
-	•	GET  /health → Health check
+| Service          | Purpose                                | Internal Port | Source Folder             |
+| :--------------- | :------------------------------------- | :------------ | :------------------------ |
+| `ingest-server`  | Public ingest gateway for LoRaWAN payloads | `8000`        | `~/iot/ingest-server/`    |
+| `device-manager` | Device CRUD, metadata & decoding logic   | `9000`        | `~/iot/device-manager/`   |
+| `reverse-proxy`  | Caddy TLS & routing                    | `80/443`      | `~/iot/unified-caddyfile` |
+| `ingest-database`| PostgreSQL for raw uplinks             | `5432`        | `volume ingest-server_pgdata` |
+| `device-database`| PostgreSQL for device metadata         | `5432`        | `volume postgres_data`    |
 
-Device Manager
-	•	GET    /v1/devices
-	•	POST   /v1/devices
-	•	PUT    /v1/devices/{id}
-	•	DELETE /v1/devices/{id}
-	•	UI served at /static/
+### Proxy & Domains
 
-Environment Variables (example)
+The platform utilizes a reverse proxy (Caddy) to handle TLS termination and route traffic to the appropriate services.
 
-POSTGRES_HOST=ingest-database
-POSTGRES_DB=ingest
-POSTGRES_USER=ingestuser
-POSTGRES_PASSWORD=ingestpass
-DATABASE_URL=postgresql+psycopg2://iot:secret@device-database:5432/device_db
+* `ingest.verdegris.eu` &rarr; `ingest-service:8000`
+* `api.verdegris.eu` &rarr; `device-manager:9000`
+* `adminer.verdegris.eu` &rarr; `adminer-ui:8080` (assuming you have an Adminer service)
+* `app.verdegris.eu` &rarr; static frontend
 
-Quick Start
+## File & Folder Structure
 
-git clone git@github.com:cpaumelle/soho-iot-docs.git
-cd soho-iot-docs
-less docs/services/ingest-server.md
-
-Detailed Service Docs
-	•	Ingest Server → ./docs/services/ingest-server.md
-	•	API Gateway    → ./docs/services/api-gateway.md
-	•	Device Manager → ./docs/services/device-manager.md
-	•	Adminer Dash   → ./docs/services/adminer-dashboard.md
-	•	Adminer Config → ./docs/services/adminer-config.md
+The core repository structure is as follows:
